@@ -1,7 +1,7 @@
 <script>
   import Stepper from "./components/Stepper.svelte";
   import QrGrid from "./components/QrGrid.svelte";
-  import { buildQrGrid } from "./lib/qrModel.js";
+  import { buildQrGrid, iso88591Encode } from "./lib/qrModel.js";
 
   const steps = [
     {
@@ -30,7 +30,7 @@
     {
       id: 4,
       title: "Codierungsmodus",
-      short: "Demo: 2×2 Block unten rechts (0100)",
+      short: "Festlegung des Datentyps (Byte, Alphanumerisch, ...)",
       enabled: true,
       detail:
         "Im rechts-unteren 2x2-Block steht binär codiert, um welche Art von Daten es sich handelt. In dieser Demo wird nur der Byte-Modus unterstützt (0100).",
@@ -54,40 +54,79 @@
     {
       id: 7,
       title: "Längenfeld",
-      short: "Byte-Länge eintragen (später korrekt)",
-      enabled: false,
+      short: "Byte-Länge eintragen (8 Bits)",
+      enabled: true,
+      detail:
+        "Jetzt wird das <b>Längenfeld</b> (8 Bit) in den QR-Zickzack geschrieben: die Byte-Länge der Nutzdaten. Es beginnt <b>direkt nach</b> den 4 Mode-Bits (0100).",
     },
     {
       id: 8,
       title: "Restliche Bytes",
-      short: "Daten in QR-Zickzack (später)",
-      enabled: false,
+      short: "Nutzdaten schreiben (Byte 1, 2, ...)",
+      enabled: true,
+      detail:
+        "Jetzt werden die <b>Nutzdaten-Bytes</b> (Byte 1, Byte 2, …) bitweise in der QR-Schreibreihenfolge eingetragen.",
     },
     {
       id: 9,
-      title: "Fehlerkorrektur",
-      short: "Reed-Solomon (optional, später)",
-      enabled: false,
+      title: "Stop-Block",
+      short: "4 Bit weiß (0000)",
+      enabled: true,
+      detail:
+        "Als nächstes fügen wir einen <b>Stop-Block</b> hinzu: <b>4 Bits</b> mit dem Wert <code>0000</code> (also nur 0-Bits = weiß). Im Byte-Mode (0100) sind wir danach bereits wieder auf einer <b>Byte-Grenze</b>.",
     },
     {
       id: 10,
+      title: "Fehlerkorrektur (Low)",
+      short: "Reed–Solomon (7 Bytes) berechnen + schreiben",
+      enabled: true,
+      detail:
+        "Nach dem Stop-Block (0000) füllen wir zunächst die restlichen Datenplätze bis zur Daten-Kapazität mit Auffüll-Bytes (abwechselnd <code>11101100/00010001</code>) auf.<br/><br/> Anschließend berechnen wir die <b>Reed–Solomon</b>-Fehlerkorrektur (Level <b>Low</b>): aus den Daten-Bytes werden <b>7 ECC-Bytes</b> erzeugt (GF(256), Polynom 0x11d) und direkt in den QR-Zickzack geschrieben.",
+    },
+    {
+      id: 11,
       title: "Maske",
-      short: "Mask-Pattern drüber legen (später)",
-      enabled: false,
+      short: "Eine von 8 Masken anwenden",
+      enabled: true,
+      detail:
+        "In diesem Schritt wählen wir eine <b>Maske</b> (0\u20137) und wenden sie auf die <b>Datenmodule</b> an. Die Maske wird <b>nicht</b> auf Finder/Timing/Dark-Module oder den Format-String angewendet. Ohne Masken-Auswahl geht es nicht weiter.",
+    },
+    {
+      id: 12,
+      title: "Format-String",
+      short: "ECC-Level + Masken-ID eintragen",
+      enabled: true,
+      detail:
+        "Zum Schluss schreiben wir den <b>Format-String</b> in die zuvor reservierten roten Felder: <b>Fehlerkorrektur-Level</b> (hier immer <b>Low/L</b>) + <b>Masken-ID</b> (0\u20137) plus BCH-Prüfbits. Dieser String wird <b>nicht</b> maskiert.",
     },
   ];
 
   let active = $state(1);
   let text = $state("Informatik");
+  let maskId = $state(null);
 
-  const model = $derived.by(() => buildQrGrid(active, text));
+  const iso = $derived.by(() => iso88591Encode(text));
+  const tooLong = $derived.by(() => iso.byteLength > 17);
+
+  const model = $derived.by(() => buildQrGrid(active, text, maskId));
 
   function select(id) {
+    if (tooLong && id >= 6) return;
+    if (id >= 12 && maskId == null) return;
     active = id;
+  }
+
+  function onMaskSelect(next) {
+    maskId = next;
   }
 
   function onTextChange(next) {
     text = next;
+
+    const nextLen = iso88591Encode(next).byteLength;
+    if (nextLen > 17 && active >= 6) {
+      active = 5;
+    }
   }
 </script>
 
@@ -109,7 +148,15 @@
 
   <main class="main">
     <section class="left">
-      <Stepper {steps} {active} onSelect={select} {text} {onTextChange} />
+      <Stepper
+        {steps}
+        {active}
+        onSelect={select}
+        {text}
+        {onTextChange}
+        {maskId}
+        {onMaskSelect}
+      />
     </section>
 
     <section class="right">
@@ -120,7 +167,7 @@
         </div>
       </div>
 
-      <QrGrid {model} pixelSize={18} />
+      <QrGrid {model} pixelSize={20} />
 
       <div class="legend">
         <div class="lg"><span class="sw unset"></span> ungenutzt</div>

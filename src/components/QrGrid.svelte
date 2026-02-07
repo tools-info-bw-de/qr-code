@@ -1,7 +1,8 @@
 <script>
-  const { model, pixelSize = 16, quietMargin = 40 } = $props();
+  const { model, pixelSize = 16, quietMargin = 80 } = $props();
 
   let hoveredRegionId = $state(null);
+  let hoveredCellKey = $state(null);
   let tooltip = $state(null);
 
   const marginPx = $derived(Math.max(0, Number(quietMargin) || 0));
@@ -9,6 +10,7 @@
 
   function showTooltipAt(e, cell) {
     hoveredRegionId = cell.regionId;
+    hoveredCellKey = byKey(cell);
     const info = model?.regions?.[cell.regionId];
     if (!info) {
       tooltip = null;
@@ -19,6 +21,7 @@
       x: e.clientX + 14,
       y: e.clientY + 14,
       info,
+      cell,
     };
   }
 
@@ -33,6 +36,7 @@
 
   function onLeave() {
     hoveredRegionId = null;
+    hoveredCellKey = null;
     tooltip = null;
   }
 
@@ -48,12 +52,17 @@
     if (!cell) return "unset";
     if (cell.kind === "empty") return "unset";
     if (cell.kind === "format") return "reserved";
+    if (cell.kind === "formatBit") return cell.on ? "on" : "off";
     if (cell.kind === "dataPos") return "data";
     return cell.on ? "on" : "off";
   };
 
   const byteBoxes = $derived.by(() => {
-    const cells = model?.cells?.filter((c) => c.kind === "dataPos") ?? [];
+    const cells =
+      model?.cells?.filter(
+        (c) =>
+          (c.kind === "dataPos" || c.kind === "data") && c.byteIndex != null,
+      ) ?? [];
     /** @type {Map<number, any>} */
     const boxes = new Map();
 
@@ -78,6 +87,22 @@
     }
 
     return Array.from(boxes.values()).sort((a, b) => a.byteIndex - b.byteIndex);
+  });
+
+  const bitValueText = (cell) => {
+    if (!cell) return "";
+    if (cell.bitValue === 0 || cell.bitValue === 1)
+      return String(cell.bitValue);
+    if (cell.kind === "dataPos") return "(noch leer)";
+    return cell.on ? "1" : "0";
+  };
+
+  const hoveredBitCells = $derived.by(() => {
+    if (!model || !hoveredRegionId) return [];
+    return (model.cells ?? [])
+      .filter((c) => c.regionId === hoveredRegionId && c.bitIndex != null)
+      .slice()
+      .sort((a, b) => (a.bitIndex ?? 0) - (b.bitIndex ?? 0));
   });
 </script>
 
@@ -117,6 +142,18 @@
             {/if}
           </div>
         {/each}
+
+        {#if hoveredRegionId}
+          {#each hoveredBitCells as c (byKey(c))}
+            <div
+              class="bitIndex"
+              style={`left:${c.x * pixelSize + 1}px; top:${c.y * pixelSize + 1}px;`}
+              aria-hidden="true"
+            >
+              {c.bitIndex}
+            </div>
+          {/each}
+        {/if}
       </div>
     </div>
   {/if}
@@ -129,6 +166,12 @@
     >
       <div class="tt-title">{tooltip.info.title}</div>
       <div class="tt-desc">{tooltip.info.description}</div>
+      {#if tooltip.cell?.bitIndex != null}
+        <div class="tt-meta">
+          Bit {tooltip.cell.bitIndex}:
+          <span class="tt-val">{bitValueText(tooltip.cell)}</span>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -217,16 +260,43 @@
 
   .cell.on {
     background: #000;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-    border-radius: 2px;
   }
 
   .cell.hl {
     transform: scale(1.05);
-    background: rgba(110, 231, 255, 0.55);
     box-shadow:
-      0 0 0 1px rgba(110, 231, 255, 0.65) inset,
-      0 0 0 2px rgba(110, 231, 255, 0.12);
+      0 0 0 2px rgba(110, 231, 255, 0.65) inset,
+      0 0 0 3px rgba(110, 231, 255, 0.14);
+  }
+
+  /* Full-cell hover tint that keeps the original cell color visible. */
+  .cell.hl::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    background: rgba(59, 130, 246, 0.28);
+    pointer-events: none;
+  }
+
+  .bitIndex {
+    position: absolute;
+    min-width: calc(var(--px) * 0.42);
+    height: calc(var(--px) * 0.7);
+    padding: 0 2px;
+    display: grid;
+    place-items: center;
+    font-size: calc(var(--px) * 0.38);
+    line-height: 1;
+    font-weight: 800;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.86);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    z-index: 5;
+    pointer-events: none;
+    user-select: none;
   }
 
   .arrow {
@@ -257,6 +327,16 @@
   .tt-title {
     font-weight: 700;
     margin-bottom: 4px;
+  }
+
+  .tt-meta {
+    margin-top: 8px;
+    font-size: 0.95rem;
+    color: rgba(231, 238, 252, 0.9);
+  }
+
+  .tt-val {
+    font-weight: 800;
   }
 
   .tt-desc {

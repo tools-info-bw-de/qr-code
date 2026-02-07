@@ -1,4 +1,158 @@
 const SIZE_V1 = 21;
+const MAX_PAYLOAD_BYTES = 17;
+const STOP_BITS = 4;
+const DATA_CODEWORDS_V1L = 19;
+const ECC_BYTES_LOW = 7;
+
+function maskCondition(maskId, x, y) {
+  // QR mask patterns 0..7 (x=column, y=row)
+  switch (maskId) {
+    case 0:
+      return (x + y) % 2 === 0;
+    case 1:
+      return y % 2 === 0;
+    case 2:
+      return x % 3 === 0;
+    case 3:
+      return (x + y) % 3 === 0;
+    case 4:
+      return (Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0;
+    case 5:
+      return ((x * y) % 2) + ((x * y) % 3) === 0;
+    case 6:
+      return (((x * y) % 2) + ((x * y) % 3)) % 2 === 0;
+    case 7:
+      return (((x + y) % 2) + ((x * y) % 3)) % 2 === 0;
+    default:
+      return false;
+  }
+}
+
+function applyMask(map, regions, maskId) {
+  if (maskId == null) return;
+  registerRegion(regions, {
+    id: "mask",
+    title: `Maske ${maskId}`,
+    description:
+      "Die Maske wird nur auf Datenmodule angewendet (nicht auf Finder/Timing/Dark/Format).",
+  });
+
+  for (const cell of map.values()) {
+    const maskable = cell.kind === "data" || cell.kind === "mode";
+    if (!maskable) continue;
+    if (!maskCondition(maskId, cell.x, cell.y)) continue;
+
+    const nextOn = !cell.on;
+    const nextBitValue =
+      cell.bitValue === 0 || cell.bitValue === 1
+        ? 1 - cell.bitValue
+        : cell.bitValue;
+    map.set(key(cell.x, cell.y), {
+      ...cell,
+      on: nextOn,
+      bitValue: nextBitValue,
+      // keep regionId as-is (masking doesn't change which field it belongs to)
+    });
+  }
+}
+
+function computeFormatStringBitsLow(maskId) {
+  // Step 12 (per spec for this learning tool):
+  // - Prefix: 2 bits EC level + 3 bits mask id => 5 bits total
+  //   EC level L must start with '01'. Mask is 3-bit binary (0..7).
+  //   Example mask 7 => data bits '01' + '111' => '01111'.
+  // - Then compute 10 BCH bits with generator 0x537.
+  // NOTE: We intentionally *do not* apply the final XOR mask 0x5412 here,
+  // because the user requirement expects the format string to visibly start with '01'.
+  const eccBits = 0b01; // L => '01' (as used by this demo's convention)
+  const data5 = ((eccBits & 0b11) << 3) | (maskId & 0b111); // 5 bits
+
+  const G = 0x537;
+  let v = data5 << 10;
+  for (let bit = 14; bit >= 10; bit--) {
+    if (((v >> bit) & 1) === 1) v ^= G << (bit - 10);
+  }
+  const bch10 = v & 0x3ff;
+  const format15Raw = (data5 << 10) | bch10;
+  const FORMAT_XOR_MASK = 0b101010000010010; // 0x5412
+  const format15 = format15Raw ^ FORMAT_XOR_MASK;
+
+  const bitsMsbFirst = Array.from(
+    { length: 15 },
+    (_, i) => (format15 >> (14 - i)) & 1,
+  );
+
+  const dataBits = Array.from({ length: 5 }, (_, i) => (data5 >> (4 - i)) & 1);
+  const bchBits = Array.from({ length: 10 }, (_, i) => (bch10 >> (9 - i)) & 1);
+
+  return {
+    data5,
+    bch10,
+    format15Raw,
+    format15,
+    dataBits,
+    bchBits,
+    bitsMsbFirst,
+  };
+}
+
+function writeFormatString(map, regions, maskId) {
+  if (maskId == null) return;
+  const { dataBits, bchBits, bitsMsbFirst, format15Raw, format15 } =
+    computeFormatStringBitsLow(maskId);
+
+  const regionId = "formatBits";
+  registerRegion(regions, {
+    id: regionId,
+    title: "Format-String",
+    description:
+      `EC-Level: L (11). Masken-ID (3 Bit): ${maskId.toString(2).padStart(3, "0")}. ` +
+      `Daten (5 Bit): ${dataBits.join("")}. BCH (10 Bit): ${bchBits.join("")}. ` +
+      `Format roh (vor XOR): ${format15Raw.toString(2).padStart(15, "0")}. ` +
+      `XOR-Maske: 101010000010010. ` +
+      `Format final (15 Bit, Bit 1..15 = Lesereihenfolge MSB→LSB): ${bitsMsbFirst.join("")}. (dez: ${format15})`,
+  });
+
+  const bitValueForIndex = (bitIndex) => {
+    // bitIndex is 1..15 where 1 = first bit (MSB) and 15 = last bit (LSB)
+    if (bitIndex < 1 || bitIndex > 15) return 0;
+    return bitsMsbFirst[bitIndex - 1] ?? 0;
+  };
+
+  const place = (bitIndex, x, y) => {
+    const v = bitValueForIndex(bitIndex);
+    setCell(map, regions, x, y, {
+      kind: "formatBit",
+      regionId,
+      on: v === 1,
+      bitIndex,
+      bitValue: v,
+      bitGroup: "format",
+      // Actual bit number inside the 15-bit value (0 = LSB .. 14 = MSB)
+      formatBitNo: 15 - bitIndex,
+    });
+  };
+
+  // === Bit numbering/order exactly as requested ===
+  // Copy A (top-left):
+  // - vertical strip right of top-left finder: start at top with bit 15, count down
+  //   (8,0)=15 ... (8,5)=10, then (8,7)=9, then (8,8)=8, then (7,8)=7
+  // - horizontal strip below top-left finder: start at left border with bit 1, count right
+  //   (0,8)=1 ... (5,8)=6
+  for (let y = 0; y <= 5; y++) place(15 - y, 8, y);
+  place(9, 8, 7);
+  place(8, 8, 8);
+  place(7, 7, 8);
+  for (let x = 0; x <= 5; x++) place(1 + x, x, 8);
+
+  // Copy B (top-right + bottom-left):
+  // - right strip under top-right finder: left->right bits 8..15
+  //   (13,8)=8 ... (20,8)=15
+  // - bottom-left strip: top->bottom bits 7..1
+  //   (8,14)=7 ... (8,20)=1
+  for (let x = 13; x <= 20; x++) place(8 + (x - 13), x, 8);
+  for (let y = 14; y <= 20; y++) place(7 - (y - 14), 8, y);
+}
 
 function key(x, y) {
   return `${x},${y}`;
@@ -145,21 +299,24 @@ function drawModeBlock(map, regions) {
     id: regionId,
     title: "Codierungsmodus",
     description:
-      "Für den Anfang zeigen wir die 4 Mode-Bits als 2×2 Block unten rechts (hier fix: 0100 = Byte-Mode).",
+      "4 Bit zeigen, um welche Art von Daten es sich handelt. Hier: 0100 = Byte-Mode (der verbreitetste Modus). Die Bits werden in der QR-Schreibreihenfolge (Zickzack) ab rechts unten gesetzt.",
   });
 
+  // In the QR bitstream the mode indicator is written MSB -> LSB.
+  // Placement into modules follows the QR traversal order.
   const bits = [0, 1, 0, 0];
-  const baseX = 19;
-  const baseY = 19;
-  let i = 0;
-  for (let dy = 0; dy < 2; dy++) {
-    for (let dx = 0; dx < 2; dx++) {
-      setCell(map, regions, baseX + dx, baseY + dy, {
-        kind: "mode",
-        regionId,
-        on: bits[i++] === 1,
-      });
-    }
+  const path = computeDataModulePath(map);
+  const chunk = path.slice(0, 4);
+  for (let i = 0; i < chunk.length; i++) {
+    const p = chunk[i];
+    setCell(map, regions, p.x, p.y, {
+      kind: "mode",
+      regionId,
+      on: bits[i] === 1,
+      bitIndex: i + 1,
+      bitValue: bits[i],
+      bitGroup: "mode",
+    });
   }
 }
 
@@ -201,7 +358,16 @@ function computeDataModulePath(map) {
 
   const isFree = (x, y) => {
     const c = map.get(key(x, y));
-    return !!c && c.kind === "empty";
+    // For later steps we want to write into the previously reserved preview modules.
+    // Therefore, `dataPos` (step 6 placeholders) and already written `data` are treated
+    // as part of the traversable path as well.
+    return (
+      !!c &&
+      (c.kind === "empty" ||
+        c.kind === "dataPos" ||
+        c.kind === "data" ||
+        c.kind === "mode")
+    );
   };
 
   // QR-style traversal: pairs of columns from right to left, alternating up/down.
@@ -237,29 +403,30 @@ function arrowDir(first, last) {
   return dx <= 0 ? "left" : "right";
 }
 
-function placeBytePositionsPreview(map, regions, text) {
+function placeBytePositionsPreview(map, regions, text, step) {
   const { bytes } = iso88591Encode(text);
   const path = computeDataModulePath(map);
 
-  // Byte-Mode (Version 1–9): the character count indicator is 8 bits = 1 byte.
-  // For step 6 we already reserve/show this extra byte before the payload bytes.
-  const totalBytes = bytes.length + 1;
+  // Bitstream starts with the 4 mode bits. The length field (8 bits) starts at bit 4,
+  // then the payload bytes follow.
+  const previewByteCount = 1 + bytes.length;
 
-  for (let byteIndex = 0; byteIndex < totalBytes; byteIndex++) {
-    const chunk = path.slice(byteIndex * 8, byteIndex * 8 + 8);
+  for (let byteIndex = 0; byteIndex < previewByteCount; byteIndex++) {
+    const startBit = 4 + byteIndex * 8;
+    const chunk = path.slice(startBit, startBit + 8);
     if (chunk.length < 8) break;
 
     const dir = arrowDir(chunk[0], chunk[chunk.length - 1]);
     const regionId = `bytepos:${byteIndex}`;
-
     const isLength = byteIndex === 0;
+
     registerRegion(regions, {
       id: regionId,
       title: isLength
         ? "Längenfeld (1 Byte) – Position"
-        : `Byte ${byteIndex - 1} (Position)`,
+        : `Byte ${byteIndex} (Position)`,
       description: isLength
-        ? "Dieses Byte (8 Bits) speichert die Länge der Nutzdaten (im Byte-Mode für Version 1–9)."
+        ? "Dieses Feld (8 Bits) speichert die Länge der Nutzdaten (im Byte-Mode für Version 1–9)."
         : "Position der nächsten 8 Bits im Zickzack-Verlauf. Die Pfeilrichtung zeigt die Leserichtung dieses Bytes.",
     });
 
@@ -273,8 +440,355 @@ function placeBytePositionsPreview(map, regions, text) {
         dir,
         isHead: i === 0,
         isLength,
+        bitIndex: i + 1,
+        bitGroup: "byte",
+        bitValue: null,
       });
     }
+  }
+
+  if (step < 10) return;
+
+  // Stop-Block (terminator): 4 bits 0000 directly after the payload.
+  const stopStartBit = 12 + bytes.length * 8;
+  const stopChunk = path.slice(stopStartBit, stopStartBit + STOP_BITS);
+  if (stopChunk.length === STOP_BITS) {
+    const stopRegionId = "stoppos";
+    registerRegion(regions, {
+      id: stopRegionId,
+      title: "Stop-Block (4 Bit) – Position",
+      description:
+        "Nach den Nutzdaten kommen 4 Stop-Bits (0000). Im Byte-Mode endet man danach bereits wieder auf einer Byte-Grenze.",
+    });
+    for (let i = 0; i < stopChunk.length; i++) {
+      const p = stopChunk[i];
+      setCell(map, regions, p.x, p.y, {
+        kind: "dataPos",
+        regionId: stopRegionId,
+        on: false,
+        byteIndex: null,
+        dir: null,
+        isHead: false,
+        isLength: false,
+        bitIndex: i + 1,
+        bitGroup: "stop",
+        bitValue: null,
+      });
+    }
+  }
+
+  // Pad bytes fill the remaining data codewords (V1-L: 19 data codewords total).
+  const dataCodewordsUsed = 2 + bytes.length; // mode+len+payload+stop = 16 + 8n bits = (2+n) bytes
+  for (let cw = dataCodewordsUsed; cw < DATA_CODEWORDS_V1L; cw++) {
+    const padNumber = cw - dataCodewordsUsed + 1;
+    const startBit = cw * 8;
+    const chunk = path.slice(startBit, startBit + 8);
+    if (chunk.length < 8) break;
+
+    const dir = arrowDir(chunk[0], chunk[chunk.length - 1]);
+    const regionId = `bytepos:${cw}`;
+    registerRegion(regions, {
+      id: regionId,
+      title: `Auffüll-Byte ${padNumber} (Position)`,
+      description:
+        "Auffüll-Bytes füllen den restlichen Platz bis zur Daten-Kapazität. Da sie hinter dem Stop-Block kommen, sind sie inhaltlich bedeutungslos.",
+    });
+
+    for (let i = 0; i < chunk.length; i++) {
+      const p = chunk[i];
+      setCell(map, regions, p.x, p.y, {
+        kind: "dataPos",
+        regionId,
+        on: false,
+        byteIndex: cw,
+        dir,
+        isHead: i === 0,
+        isLength: false,
+        bitIndex: i + 1,
+        bitGroup: "pad",
+        bitValue: null,
+      });
+    }
+  }
+
+  // ECC bytes follow after the data codewords.
+  for (let i = 0; i < ECC_BYTES_LOW; i++) {
+    const byteIndex = DATA_CODEWORDS_V1L + i;
+    const startBit = byteIndex * 8;
+    const chunk = path.slice(startBit, startBit + 8);
+    if (chunk.length < 8) break;
+
+    const dir = arrowDir(chunk[0], chunk[chunk.length - 1]);
+    const regionId = `bytepos:${byteIndex}`;
+    registerRegion(regions, {
+      id: regionId,
+      title: `ECC ${i + 1} (Position)`,
+      description:
+        "Reed-Solomon Fehlerkorrektur-Bytes (Low). Diese werden aus allen Daten-Bits (inkl. Mode/Länge/Nutzdaten/Stop/Pad) berechnet.",
+    });
+
+    for (let j = 0; j < chunk.length; j++) {
+      const p = chunk[j];
+      setCell(map, regions, p.x, p.y, {
+        kind: "dataPos",
+        regionId,
+        on: false,
+        byteIndex,
+        dir,
+        isHead: j === 0,
+        isLength: false,
+        bitIndex: j + 1,
+        bitGroup: "ecc",
+        bitValue: null,
+      });
+    }
+  }
+}
+
+function bitsFromByte(b) {
+  const bits = [];
+  for (let bit = 7; bit >= 0; bit--) bits.push((b >> bit) & 1);
+  return bits;
+}
+
+function writeByteToPath(
+  map,
+  regions,
+  regionId,
+  title,
+  description,
+  byteIndex,
+  startBit,
+  byteValue,
+  bitGroup,
+) {
+  if (title || description) {
+    registerRegion(regions, {
+      id: regionId,
+      title: title ?? regionId,
+      description: description ?? "",
+    });
+  }
+
+  const path = computeDataModulePath(map);
+  const chunk = path.slice(startBit, startBit + 8);
+  if (chunk.length < 8) return;
+
+  const bits = bitsFromByte(byteValue);
+  for (let i = 0; i < 8; i++) {
+    const p = chunk[i];
+    setCell(map, regions, p.x, p.y, {
+      kind: "data",
+      regionId,
+      on: bits[i] === 1,
+      byteIndex,
+      bitIndex: i + 1,
+      bitValue: bits[i],
+      bitGroup,
+    });
+  }
+}
+
+function writeLengthByte(map, regions, byteLength) {
+  writeByteToPath(
+    map,
+    regions,
+    "len",
+    "Längenfeld (1 Byte)",
+    "Dieses Byte (8 Bits) speichert die Länge der Nutzdaten (im Byte-Mode für Version 1–9).",
+    0,
+    4,
+    byteLength & 0xff,
+    "len",
+  );
+}
+
+function writePayloadBytes(map, regions, bytes) {
+  for (let payloadIndex = 0; payloadIndex < bytes.length; payloadIndex++) {
+    const byteNumber = payloadIndex + 1; // user-facing numbering
+    const b = bytes[payloadIndex];
+    const regionId = `byte:${byteNumber}`;
+    const printable = b >= 32 && b <= 126 ? String.fromCharCode(b) : "";
+    writeByteToPath(
+      map,
+      regions,
+      regionId,
+      `Byte ${byteNumber}`,
+      `0x${b.toString(16).padStart(2, "0").toUpperCase()}${
+        printable ? ` ('${printable}')` : ""
+      }`,
+      byteNumber,
+      12 + payloadIndex * 8,
+      b,
+      "byte",
+    );
+  }
+}
+
+function writeStopAndPadBits(map, regions, payloadLen) {
+  const regionId = "stop";
+  registerRegion(regions, {
+    id: regionId,
+    title: "Stop-Block (4 Bit)",
+    description:
+      "Stop-Block sind 4 Bits mit 0 (weiß) direkt nach den Nutzdaten (0000). Im Byte-Mode endet man danach bereits wieder auf einer Byte-Grenze.",
+  });
+
+  const totalBits = STOP_BITS;
+  const startBit = 12 + payloadLen * 8;
+  const path = computeDataModulePath(map);
+  const chunk = path.slice(startBit, startBit + totalBits);
+  for (let i = 0; i < chunk.length; i++) {
+    const p = chunk[i];
+    setCell(map, regions, p.x, p.y, {
+      kind: "data",
+      regionId,
+      on: false,
+      byteIndex: null,
+      bitIndex: i + 1,
+      bitValue: 0,
+      bitGroup: "stop",
+    });
+  }
+}
+
+function initGfTables() {
+  // GF(256) with primitive polynomial 0x11d (used by QR codes)
+  const exp = new Uint8Array(512);
+  const log = new Uint8Array(256);
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    exp[i] = x;
+    log[x] = i;
+    x <<= 1;
+    if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) exp[i] = exp[i - 255];
+  return { exp, log };
+}
+
+const GF = initGfTables();
+
+function gfMul(a, b) {
+  if (a === 0 || b === 0) return 0;
+  return GF.exp[GF.log[a] + GF.log[b]];
+}
+
+function polyMul(p, q) {
+  const out = new Uint8Array(p.length + q.length - 1);
+  for (let i = 0; i < p.length; i++) {
+    for (let j = 0; j < q.length; j++) {
+      out[i + j] ^= gfMul(p[i], q[j]);
+    }
+  }
+  return out;
+}
+
+function rsGeneratorPoly(ecLen) {
+  let g = new Uint8Array([1]);
+  for (let i = 0; i < ecLen; i++) {
+    g = polyMul(g, new Uint8Array([1, GF.exp[i]]));
+  }
+  return g;
+}
+
+function rsEncode(dataBytes, ecLen) {
+  const gen = rsGeneratorPoly(ecLen);
+  const ecc = new Uint8Array(ecLen);
+
+  for (const d of dataBytes) {
+    const factor = d ^ ecc[0];
+    for (let i = 0; i < ecLen - 1; i++) ecc[i] = ecc[i + 1];
+    ecc[ecLen - 1] = 0;
+
+    for (let j = 0; j < ecLen; j++) {
+      ecc[j] ^= gfMul(gen[j + 1], factor);
+    }
+  }
+
+  return Array.from(ecc);
+}
+
+function writeEccLow(map, regions, payloadBytes) {
+  // Build the data bitstream (V1-L: 19 data codewords) starting at the mode bits.
+  // Mode (0100) + length (8 bits) + payload + stop (0000), then pad bytes to capacity.
+  const bits = [];
+  bits.push(0, 1, 0, 0); // byte mode = 0100
+  bits.push(...bitsFromByte(payloadBytes.length & 0xff));
+  for (const b of payloadBytes) bits.push(...bitsFromByte(b));
+  for (let i = 0; i < STOP_BITS; i++) bits.push(0);
+
+  while (bits.length % 8 !== 0) bits.push(0);
+
+  const padPattern = [0xec, 0x11];
+  let padI = 0;
+  while (bits.length < DATA_CODEWORDS_V1L * 8) {
+    bits.push(...bitsFromByte(padPattern[padI++ % padPattern.length]));
+  }
+  bits.length = DATA_CODEWORDS_V1L * 8;
+
+  const dataBytes = [];
+  for (let i = 0; i < DATA_CODEWORDS_V1L; i++) {
+    let v = 0;
+    for (let j = 0; j < 8; j++) v = (v << 1) | (bits[i * 8 + j] & 1);
+    dataBytes.push(v);
+  }
+
+  const ecc = rsEncode(dataBytes, ECC_BYTES_LOW);
+
+  const startByteIndex = DATA_CODEWORDS_V1L;
+  registerRegion(regions, {
+    id: "ecc",
+    title: "Reed-Solomon (Low)",
+    description:
+      "Wir erzeugen 7 Fehlerkorrektur-Bytes aus den Daten-Bytes (Länge + Nutzdaten + Stop-Block + Padding) mit Reed–Solomon über GF(256) (Polynom 0x11d).",
+  });
+
+  for (let i = 0; i < ecc.length; i++) {
+    const byteIndex = startByteIndex + i;
+    const b = ecc[i];
+    writeByteToPath(
+      map,
+      regions,
+      `ecc:${i + 1}`,
+      `ECC ${i + 1}`,
+      `Fehlerkorrektur-Byte ${i + 1} (aus Reed–Solomon, Low). Wert: 0x${b
+        .toString(16)
+        .padStart(2, "0")
+        .toUpperCase()}.`,
+      byteIndex,
+      byteIndex * 8,
+      b,
+      "ecc",
+    );
+  }
+}
+
+function writePadBytes(map, regions, payloadLen) {
+  // Pad bytes start right after the 4 stop bits. In byte mode this is already byte-aligned.
+  const stopPadByteIndex = payloadLen + 1; // used only for user-facing numbering (Pad-Byte 1, 2, ...)
+
+  const padPattern = [0xec, 0x11];
+  let padI = 0;
+  for (
+    let byteIndex = payloadLen + 2;
+    byteIndex < DATA_CODEWORDS_V1L;
+    byteIndex++
+  ) {
+    const b = padPattern[padI++ % padPattern.length];
+    writeByteToPath(
+      map,
+      regions,
+      `pad:${byteIndex - stopPadByteIndex}`,
+      `Pad-Byte ${byteIndex - stopPadByteIndex}`,
+      `Padding-Byte (wechselnd 11101100/00010001). Wert (binär): ${b
+        .toString(2)
+        .padStart(8, "0")}.`,
+      byteIndex,
+      byteIndex * 8,
+      b,
+      "pad",
+    );
   }
 }
 
@@ -347,7 +861,8 @@ function placeByteBlocks(map, regions, bytes) {
  * @param {number} step
  * @param {string} text
  */
-export function buildQrGrid(step, text) {
+export function buildQrGrid(step, text, maskId = null) {
+  let effectiveStep = step;
   const map = new Map();
   const regions = {
     empty: {
@@ -377,13 +892,49 @@ export function buildQrGrid(step, text) {
   if (step >= 3) drawFormatReservations(map, regions);
 
   // Step 4: Mode Bits
-  if (step >= 4) drawModeBlock(map, regions);
+  if (effectiveStep >= 4) drawModeBlock(map, regions);
 
   // Step 5: Text-Eingabe (noch keine Pixel)
 
+  const { bytes: payloadBytes } = iso88591Encode(text);
+  if (payloadBytes.length > MAX_PAYLOAD_BYTES && effectiveStep >= 6) {
+    effectiveStep = 5;
+  }
+
   // Step 6: Zeige nur Byte-Positionen + Leserichtung (noch ungefüllt)
-  if (step >= 6) {
-    placeBytePositionsPreview(map, regions, text);
+  if (effectiveStep >= 6) {
+    placeBytePositionsPreview(map, regions, text, effectiveStep);
+  }
+
+  // Step 7: Längenfeld (8 Bit) schreiben
+  if (effectiveStep >= 7) {
+    writeLengthByte(map, regions, payloadBytes.length);
+  }
+
+  // Step 8: Nutzdaten-Bytes schreiben
+  if (effectiveStep >= 8) {
+    writePayloadBytes(map, regions, payloadBytes);
+  }
+
+  // Step 9: Stop-Block (4 Bit 0000) schreiben
+  if (effectiveStep >= 9) {
+    writeStopAndPadBits(map, regions, payloadBytes.length);
+  }
+
+  // Step 10: Reed-Solomon Fehlerkorrektur (Low) schreiben
+  if (effectiveStep >= 10) {
+    writePadBytes(map, regions, payloadBytes.length);
+    writeEccLow(map, regions, payloadBytes);
+  }
+
+  // Step 11: Maske anwenden (nur auf Datenmodule)
+  if (effectiveStep >= 11 && maskId != null) {
+    applyMask(map, regions, maskId);
+  }
+
+  // Step 12: Format-String schreiben (ECC-Level + Masken-ID)
+  if (effectiveStep >= 12 && maskId != null) {
+    writeFormatString(map, regions, maskId);
   }
 
   return { size: SIZE_V1, cells: Array.from(map.values()), regions };

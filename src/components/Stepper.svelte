@@ -11,14 +11,39 @@
     onTextChange = (next) => {
       void next;
     },
+    maskId = null,
+    onMaskSelect = (next) => {
+      void next;
+    },
   } = $props();
 
-  function selectStep(step) {
-    if (!step?.enabled) return;
-    onSelect(step.id);
-  }
+  const MAX_BYTES = 17;
 
   const iso = $derived.by(() => iso88591Encode(text));
+  const tooLong = $derived.by(() => iso.byteLength > MAX_BYTES);
+
+  const maskOptions = [
+    { id: 0, rule: "(x + y) mod 2 = 0" },
+    { id: 1, rule: "y mod 2 = 0" },
+    { id: 2, rule: "x mod 3 = 0" },
+    { id: 3, rule: "(x + y) mod 3 = 0" },
+    { id: 4, rule: "(⌊y/2⌋ + ⌊x/3⌋) mod 2 = 0" },
+    { id: 5, rule: "(x·y mod 2) + (x·y mod 3) = 0" },
+    { id: 6, rule: "((x·y mod 2) + (x·y mod 3)) mod 2 = 0" },
+    { id: 7, rule: "((x + y mod 2) + (x·y mod 3)) mod 2 = 0" },
+  ];
+
+  const stepEnabled = (step) => {
+    if (!step?.enabled) return false;
+    if (tooLong && step.id >= 6) return false;
+    if (step.id >= 12 && maskId == null) return false;
+    return true;
+  };
+
+  function selectStep(step) {
+    if (!stepEnabled(step)) return;
+    onSelect(step.id);
+  }
   const binPreview = $derived.by(() => {
     const groups = iso.bytes
       .slice(0, 64)
@@ -35,12 +60,12 @@
 <div class="steps" role="navigation" aria-label="Schritte">
   {#each steps as step (step.id)}
     <div
-      class={`item ${step.id === active ? "open" : ""} ${step.enabled ? "" : "disabled"}`}
+      class={`item ${step.id === active ? "open" : ""} ${stepEnabled(step) ? "" : "disabled"}`}
     >
       <button
         class="head"
         type="button"
-        disabled={!step.enabled}
+        disabled={!stepEnabled(step)}
         aria-expanded={step.id === active}
         aria-controls={`step-detail-${step.id}`}
         onclick={() => selectStep(step)}
@@ -72,19 +97,20 @@
               </li>
               <li>Mit jedem Schritt wird der QR-Code erweitert.</li>
               <li>
-                Fahre mit der Maus über den QR-Code, um je nach Schritt eine
+                Fahre mit der Maus über den QR-Code, um zu jedem Schritt eine
                 Erklärung der Bereiche anzuzeigen.
               </li>
               <li>
-                <u>Einschränkung:</u> Diese Seite unterstützt nur die einfachste
-                QR-Codes für kurzen Text (21×21 Pixel groß).
+                <u>Einschränkung:</u> Diese Seite unterstützt nur einfachste QR-Codes
+                (21×21 Pixel groß) für kurzen Text (max. 17 Bytes) mit geringer Fehlerkorrektur.
               </li>
             </ul>
           {/if}
 
           {#if step.id === 2}
             <p class="hint">
-              Tipp: Hover über eine Ecke, um den Bereich zu markieren.
+              Tipp: Hover mit der Maus über den QR-Code, um eine Erklärung zu
+              sehen.
             </p>
           {/if}
 
@@ -119,6 +145,13 @@
               />
             </label>
 
+            {#if tooLong}
+              <div class="warning">
+                Zu lang: <b>{iso.byteLength}</b> Bytes (max. {MAX_BYTES}). Bitte
+                kürzen – Alle weiteren Schritte sind gesperrt.
+              </div>
+            {/if}
+
             <div class="isoBox">
               <div class="isoRow">
                 <div class="isoKey">
@@ -148,9 +181,88 @@
           {#if step.id === 6}
             <p class="hint">
               Hier siehst du die <b>Byte-Positionen</b> (hellblau) und pro Byte
-              eine Pfeilrichtung. Das erste Byte ist das <b>Längenfeld</b> (1 Byte),
-              danach folgen die Nutzdaten-Bytes. Es werden noch keine Bits geschrieben.
+              eine Pfeilrichtung. Wichtig: Vor den Bytes stehen zuerst die
+              <b>4 Mode-Bits</b>
+              (0100). <b>Direkt danach</b> kommt das erste Byte: das
+              <b>Längenfeld</b>
+              (1 Byte), danach folgen die Nutzdaten-Bytes. Es werden noch keine Bits
+              geschrieben.
             </p>
+          {/if}
+
+          {#if step.id === 7}
+            <p class="hint">
+              Jetzt wird das <b>Längenfeld</b> geschrieben:
+              <b>{iso.byteLength}</b>
+              als 8-Bit-Zahl.
+            </p>
+            <div class="pillrow">
+              <div class="pill">
+                <span class="k">Länge</span>
+                <span class="v">{iso.byteLength}</span>
+              </div>
+              <div class="pill">
+                <span class="k">binär</span>
+                <span class="v"
+                  >{iso.byteLength.toString(2).padStart(8, "0")}</span
+                >
+              </div>
+            </div>
+          {/if}
+
+          {#if step.id === 8}
+            <p class="hint">Erinnerung: Die Eingabe aus Schritt 5 lautet:</p>
+            <code>{iso.text}</code>
+            <pre
+              class="codeBlock"
+              aria-label="ISO-8859-1 Bytes (binär)">{binPreview}</pre>
+          {/if}
+
+          {#if step.id === 9}{/if}
+
+          {#if step.id === 10}
+            <p class="hint">
+              Bevor wir ECC berechnen, füllen wir die restlichen Datenplätze bis
+              zur Daten-Kapazität auf: nach dem <b>Stop-Block</b> (0000) folgen
+              ggf. <b>Pad-Bytes</b> (abwechselnd
+              <code>11101100</code>/<code>00010001</code>).
+            </p>
+            <p class="hint">
+              Reed–Solomon (Low): aus den Daten-Bytes erzeugen wir
+              <b>7 Fehlerkorrektur-Bytes</b>. Gerechnet wird in <b>GF(256)</b>
+              (mit Polynom <code>0x11d</code>).
+            </p>
+            <p class="hint">
+              Idee: Das Datenpolynom wird durch das Generatorpolynom geteilt;
+              der <b>Rest</b> sind die ECC-Bytes, die wir hinten anhängen.
+            </p>
+          {/if}
+
+          {#if step.id === 11}
+            <p class="hint">
+              Wähle eine der <b>8 Masken</b> (0–7). Die Maske wird nur auf die
+              <b>Datenmodule</b> angewendet (nicht auf Finder/Timing/Dark/Format).
+            </p>
+
+            {#if maskId == null}
+              <div class="warning">
+                Bitte wähle eine Maske aus – ohne Maske ist Schritt 11 nicht
+                abgeschlossen.
+              </div>
+            {/if}
+
+            <div class="maskGrid" role="group" aria-label="Masken-Auswahl">
+              {#each maskOptions as m (m.id)}
+                <button
+                  type="button"
+                  class={`maskBtn ${maskId === m.id ? "sel" : ""}`}
+                  onclick={() => onMaskSelect(m.id)}
+                >
+                  <div class="mTitle">Maske {m.id}</div>
+                  <div class="mRule">{m.rule}</div>
+                </button>
+              {/each}
+            </div>
           {/if}
         </div>
       </div>
@@ -161,6 +273,48 @@
 <style>
   .warning {
     color: #fbbf24 !important;
+  }
+
+  .maskGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .maskBtn {
+    text-align: left;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text);
+    padding: 10px 10px;
+    cursor: pointer;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease,
+      background 140ms ease;
+  }
+
+  .maskBtn:hover {
+    border-color: rgba(110, 231, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(110, 231, 255, 0.08);
+  }
+
+  .maskBtn.sel {
+    border-color: rgba(110, 231, 255, 0.9);
+    box-shadow: 0 0 0 3px rgba(110, 231, 255, 0.12);
+    background: rgba(110, 231, 255, 0.06);
+  }
+
+  .mTitle {
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .mRule {
+    font-size: 12px;
+    opacity: 0.85;
   }
 
   .steps {
