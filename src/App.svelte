@@ -3,6 +3,7 @@
   import QrGrid from "./components/QrGrid.svelte";
   import DecodeExercise from "./components/DecodeExercise.svelte";
   import { buildQrGrid, iso88591Encode } from "./lib/qrModel.js";
+  import { tick } from "svelte";
 
   const AUTHOR_NAME = "Marco Kümmel";
   const SOURCE_URL = "https://github.com/tools-info-bw-de/qr-code";
@@ -100,7 +101,7 @@
       short: "Eine von 8 Masken anwenden",
       enabled: true,
       detail:
-        "Je nachdem, welche Daten du eingegeben hast, kann es nun vorkommen, dass die geschriebenen Pixel für große gleichmäßig gefärbte Flächen sorgen. <i>Das kannst du z. B. nachvollziehen, indem du bei Schritt 5 ganze 17x den Buchstaben 'ü' als Zeichen eingibst.</i><br/><br/>Die Kamera hätte nun vielleicht Schwierigkeiten genau zu erkennen, wo ein Pixel aufhört und das andere beginnt.<br/>Daher muss nun eine sogenannte Maske ausgewählt werden. Insgesamt gibt es 8 zur Auswahl. Die Maske wird nur auf die <b>Datenmodule</b> angewendet und <b>nicht</b> auf Erkennungsmuster/Synchronisation/Dark-Module oder den Format-String.<br/><br/>Die Maske wird vollständig über die Datenpixel gelegt und dann per XOR angewendet, d. h. sie kehrt die originalen Pixel überall dort um, wo das Maskenpixel 1 ist.<br/><br/>In echt prüft ein komplexer Algorithmus alle Masken durch und wählt den \"besten\" aus. Hier kannst du einfach alle Masken auswählen und die deiner Meinung nach beste Maske nutzen (die QR-Code-Erkennung sollte später in der Regel mit allen Masken funktionieren).",
+        "Je nachdem, welche Daten du eingegeben hast, kann es nun vorkommen, dass die geschriebenen Pixel für große gleichmäßig gefärbte Flächen sorgen. <i>Das kannst du z. B. nachvollziehen, indem du bei Schritt 5 ganze 17x den Buchstaben 'ü' als Zeichen eingibst.</i><br/><br/>Die Kamera hätte nun vielleicht Schwierigkeiten, genau zu erkennen, wo ein Pixel aufhört und das andere beginnt.<br/>Daher muss nun eine sogenannte Maske ausgewählt werden. Insgesamt gibt es 8 zur Auswahl. Die Maske wird nur auf die <b>Datenmodule</b> angewendet und <b>nicht</b> auf Erkennungsmuster/Synchronisation/Dark-Module oder den Format-String.<br/><br/>Die Maske wird vollständig über die Datenpixel gelegt und dann per XOR angewendet, d. h. sie kehrt die originalen Pixel überall dort um, wo das Maskenpixel 1 ist.<br/><br/>In echt prüft ein komplexer Algorithmus alle Masken durch und wählt die \"beste\" aus. Hier kannst du einfach alle Masken ausprobieren und die deiner Meinung nach beste Maske nutzen (die QR-Code-Erkennung sollte später in der Regel mit allen Masken funktionieren).",
     },
     {
       id: 12,
@@ -117,6 +118,8 @@
 
   const EXERCISE_TEXT = "t1p.de/zq8tt";
   let decodeExerciseOpen = $state(false);
+  /** @type {HTMLDivElement | null} */
+  let pageEl = $state(null);
 
   const iso = $derived.by(() => iso88591Encode(text));
   const tooLong = $derived.by(() => iso.byteLength > 17);
@@ -146,8 +149,13 @@
     }
   }
 
-  function openDecodeExercise() {
+  async function openDecodeExercise() {
+    if (decodeExerciseOpen) return;
     decodeExerciseOpen = true;
+
+    // After the section mounts, nudge the page scroll a bit so the exercise is visible.
+    await tick();
+    pageEl?.scrollBy({ top: 180, behavior: "smooth" });
   }
 
   $effect(() => {
@@ -217,7 +225,7 @@
   {/if}
 </div>
 
-<div class="page">
+<div class="page" bind:this={pageEl}>
   <div class="content">
     <div class="viewport">
       <header class="top">
@@ -255,7 +263,7 @@
           <div class="rightTop">
             <div class="rightTitle">QR-Ansicht</div>
             <div class="rightSub">
-              Hover über ein Modul (Pixel), um den Bereich zu sehen.
+              Hover über ein Modul (Pixel), um eine Erklärung zu sehen.
             </div>
           </div>
 

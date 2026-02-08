@@ -30,7 +30,7 @@
     { id: 1, rule: "y mod 2 = 0" },
     { id: 2, rule: "x mod 3 = 0" },
     { id: 3, rule: "(x + y) mod 3 = 0" },
-    { id: 4, rule: "(⌊y/2⌋ + ⌊x/3⌋) mod 2 = 0" },
+    { id: 4, rule: "(y/2 + x/3) mod 2 = 0" },
     { id: 5, rule: "(x·y mod 2) + (x·y mod 3) = 0" },
     { id: 6, rule: "((x·y mod 2) + (x·y mod 3)) mod 2 = 0" },
     { id: 7, rule: "((x + y mod 2) + (x·y mod 3)) mod 2 = 0" },
@@ -371,6 +371,8 @@
                 hast du es geschafft 🎉 Du kannst den QR-Code nun
                 <b>einscannen</b>.
               </p>
+
+              <p>Außerdem wartet nun noch eine Aufgabe auf dich:</p>
 
               {#if !decodeExerciseOpen}
                 <div class="decodeCta">

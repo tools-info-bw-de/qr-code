@@ -7,6 +7,7 @@
     showBitNumbers = false,
     bitNumbersOnlyWhenEnabled = false,
     hideByteTooltipContent = false,
+    activeByteIndex = null,
   } = $props();
 
   let hoveredRegionId = $state(null);
@@ -179,7 +180,7 @@
         {#if showByteFrames}
           {#each byteBoxes as box (box.byteIndex)}
             <div
-              class={`byteBox ${box.byteIndex === 0 ? "len" : ""}`}
+              class={`byteBox ${box.byteIndex === 0 ? "len" : ""} ${activeByteIndex != null && box.byteIndex === activeByteIndex ? "active" : ""}`}
               style={`left:${box.minX * pixelSize}px; top:${box.minY * pixelSize}px; width:${(box.maxX - box.minX + 1) * pixelSize}px; height:${(box.maxY - box.minY + 1) * pixelSize}px;`}
               aria-hidden="true"
             ></div>
@@ -287,6 +288,15 @@
   .byteBox.len {
     border-color: rgba(167, 139, 250, 0.35);
     background: transparent;
+  }
+
+  .byteBox.active {
+    border-width: 3px;
+    border-color: rgba(110, 231, 255, 0.95);
+    box-shadow:
+      0 0 0 2px rgba(110, 231, 255, 0.22),
+      0 0 0 6px rgba(110, 231, 255, 0.08),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4);
   }
 
   .cell {
