@@ -1,5 +1,13 @@
 <script>
-  const { model, pixelSize = 16, quietMargin = 80 } = $props();
+  const {
+    model,
+    pixelSize = 16,
+    quietMargin = 80,
+    showByteFrames = true,
+    showBitNumbers = false,
+    bitNumbersOnlyWhenEnabled = false,
+    hideByteTooltipContent = false,
+  } = $props();
 
   let hoveredRegionId = $state(null);
   let hoveredCellKey = $state(null);
@@ -105,6 +113,38 @@
       .sort((a, b) => (a.bitIndex ?? 0) - (b.bitIndex ?? 0));
   });
 
+  const visibleBitCells = $derived.by(() => {
+    if (!hoveredRegionId) return [];
+    if (bitNumbersOnlyWhenEnabled) {
+      if (!showBitNumbers) return [];
+      return hoveredBitCells;
+    }
+
+    // Default behavior: show bit numbers on hover (and also when the toggle is on).
+    if (showBitNumbers || hoveredRegionId) return hoveredBitCells;
+    return [];
+  });
+
+  const isByteLikeCell = (c) => {
+    if (!c) return false;
+    if (c.kind !== "data") return false;
+    if (c.bitGroup === "byte" || c.bitGroup === "pad" || c.bitGroup === "ecc")
+      return true;
+    if (
+      typeof c.regionId === "string" &&
+      (c.regionId.startsWith("byte:") ||
+        c.regionId.startsWith("pad:") ||
+        c.regionId.startsWith("ecc:"))
+    )
+      return true;
+    return false;
+  };
+
+  const hideTooltipDescription = $derived.by(() => {
+    if (!hideByteTooltipContent) return false;
+    return isByteLikeCell(tooltip?.cell);
+  });
+
   const showMaskWarning = $derived.by(() => {
     if (!model?.maskApplied) return false;
     const c = tooltip?.cell;
@@ -136,13 +176,15 @@
         style={`--size:${model.size}; --px:${pixelSize}px;`}
         aria-label="QR-Code Raster"
       >
-        {#each byteBoxes as box (box.byteIndex)}
-          <div
-            class={`byteBox ${box.byteIndex === 0 ? "len" : ""}`}
-            style={`left:${box.minX * pixelSize}px; top:${box.minY * pixelSize}px; width:${(box.maxX - box.minX + 1) * pixelSize}px; height:${(box.maxY - box.minY + 1) * pixelSize}px;`}
-            aria-hidden="true"
-          ></div>
-        {/each}
+        {#if showByteFrames}
+          {#each byteBoxes as box (box.byteIndex)}
+            <div
+              class={`byteBox ${box.byteIndex === 0 ? "len" : ""}`}
+              style={`left:${box.minX * pixelSize}px; top:${box.minY * pixelSize}px; width:${(box.maxX - box.minX + 1) * pixelSize}px; height:${(box.maxY - box.minY + 1) * pixelSize}px;`}
+              aria-hidden="true"
+            ></div>
+          {/each}
+        {/if}
 
         {#each model.cells as cell (byKey(cell))}
           <div
@@ -160,8 +202,8 @@
           </div>
         {/each}
 
-        {#if hoveredRegionId}
-          {#each hoveredBitCells as c (byKey(c))}
+        {#if visibleBitCells.length}
+          {#each visibleBitCells as c (byKey(c))}
             <div
               class="bitIndex"
               style={`left:${c.x * pixelSize + 1}px; top:${c.y * pixelSize + 1}px;`}
@@ -182,7 +224,9 @@
       role="status"
     >
       <div class="tt-title">{tooltip.info.title}</div>
-      <div class="tt-desc">{tooltip.info.description}</div>
+      {#if !hideTooltipDescription}
+        <div class="tt-desc">{tooltip.info.description}</div>
+      {/if}
       {#if showMaskWarning}
         <div class="tt-warn">
           Achtung: Ab Schritt 11 liegt eine Maske (XOR) über den Daten – Bits
@@ -232,17 +276,17 @@
 
   .byteBox {
     position: absolute;
-    z-index: 1;
+    z-index: 4;
     border-radius: 4px;
     border: 1px solid rgba(59, 130, 246, 0.32);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
-    background: rgba(59, 130, 246, 0.06);
+    background: transparent;
     pointer-events: none;
   }
 
   .byteBox.len {
     border-color: rgba(167, 139, 250, 0.35);
-    background: rgba(167, 139, 250, 0.06);
+    background: transparent;
   }
 
   .cell {

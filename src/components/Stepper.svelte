@@ -16,6 +16,8 @@
     onMaskSelect = (next) => {
       void next;
     },
+    onOpenDecodeExercise = () => {},
+    decodeExerciseOpen = false,
   } = $props();
 
   const MAX_BYTES = 17;
@@ -369,6 +371,23 @@
                 hast du es geschafft 🎉 Du kannst den QR-Code nun
                 <b>einscannen</b>.
               </p>
+
+              {#if !decodeExerciseOpen}
+                <div class="decodeCta">
+                  <button
+                    class="decodeBtn"
+                    type="button"
+                    onclick={() => onOpenDecodeExercise()}
+                  >
+                    Decode-Aufgabe öffnen
+                  </button>
+                </div>
+              {:else}
+                <div class="warning">
+                  Die Decode-Aufgabe ist geöffnet. Scrolle nach unten, um sie zu
+                  sehen.
+                </div>
+              {/if}
             {/if}
           </div>
         </div>
@@ -395,6 +414,28 @@
     grid-template-columns: 1fr;
     gap: 8px;
     margin-top: 10px;
+  }
+
+  .decodeCta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .decodeBtn {
+    border-radius: 12px;
+    border: 1px solid rgba(110, 231, 255, 0.55);
+    background: rgba(110, 231, 255, 0.08);
+    color: var(--text);
+    padding: 10px 12px;
+    cursor: pointer;
+    font-weight: 750;
+  }
+
+  .decodeBtn:hover {
+    border-color: rgba(110, 231, 255, 0.9);
+    box-shadow: 0 0 0 3px rgba(110, 231, 255, 0.12);
   }
 
   .maskBtn {

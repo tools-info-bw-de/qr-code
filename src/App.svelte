@@ -1,6 +1,7 @@
 <script>
   import Stepper from "./components/Stepper.svelte";
   import QrGrid from "./components/QrGrid.svelte";
+  import DecodeExercise from "./components/DecodeExercise.svelte";
   import { buildQrGrid, iso88591Encode } from "./lib/qrModel.js";
 
   const AUTHOR_NAME = "Marco Kümmel";
@@ -114,10 +115,14 @@
   let text = $state("Informatik");
   let maskId = $state(null);
 
+  const EXERCISE_TEXT = "t1p.de/zq8tt";
+  let decodeExerciseOpen = $state(false);
+
   const iso = $derived.by(() => iso88591Encode(text));
   const tooLong = $derived.by(() => iso.byteLength > 17);
 
   const model = $derived.by(() => buildQrGrid(active, text, maskId));
+  const decodeModel = $derived.by(() => buildQrGrid(10, EXERCISE_TEXT, null));
 
   function select(id) {
     if (tooLong && id >= 6) return;
@@ -139,6 +144,10 @@
     if (nextLen > 17 && active >= 6) {
       active = 5;
     }
+  }
+
+  function openDecodeExercise() {
+    decodeExerciseOpen = true;
   }
 
   $effect(() => {
@@ -209,56 +218,69 @@
 </div>
 
 <div class="page">
-  <header class="top">
-    <div class="brand">
-      <div class="logo">QR</div>
-      <div>
-        <div class="h1">QR-Code Erklärung – Schritt für Schritt</div>
-        <div class="sub">
-          Hier wird Schritt für Schritt gezeigt, wie ein QR-Code aufgebaut ist.<br
+  <div class="content">
+    <div class="viewport">
+      <header class="top">
+        <div class="brand">
+          <div class="logo">QR</div>
+          <div>
+            <div class="h1">QR-Code Erklärung – Schritt für Schritt</div>
+            <div class="sub">
+              Hier wird Schritt für Schritt gezeigt, wie ein QR-Code aufgebaut
+              ist.<br />
+              <b>Klicke</b> dich links durch die einzelnen Schritte. Fahre mit
+              der
+              <b>Maus</b> über den QR-Code, um eine Erklärung der Bereiche anzuzeigen.
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="left">
+          <Stepper
+            {steps}
+            {active}
+            onSelect={select}
+            {text}
+            {onTextChange}
+            {maskId}
+            {onMaskSelect}
+            onOpenDecodeExercise={openDecodeExercise}
+            {decodeExerciseOpen}
           />
-          <b>Klicke</b> dich links durch die einzelnen Schritte. Fahre mit der
-          <b>Maus</b> über den QR-Code, um eine Erklärung der Bereiche anzuzeigen.
-        </div>
-      </div>
+        </section>
+
+        <section class="right">
+          <div class="rightTop">
+            <div class="rightTitle">QR-Ansicht</div>
+            <div class="rightSub">
+              Hover über ein Modul (Pixel), um den Bereich zu sehen.
+            </div>
+          </div>
+
+          <QrGrid {model} pixelSize={20} showByteFrames={false} />
+
+          <div class="legend">
+            <div class="lg"><span class="sw unset"></span> ungenutzt</div>
+            <div class="lg">
+              <span class="sw reserved"></span> reserviert (Format)
+            </div>
+            <div class="lg"><span class="sw data"></span> Byte-Position</div>
+            <div class="lg"><span class="sw off"></span> 0</div>
+            <div class="lg"><span class="sw on"></span> 1</div>
+            <div class="lg"><span class="sw hl"></span> Hover-Highlight</div>
+          </div>
+        </section>
+      </main>
     </div>
-  </header>
 
-  <main class="main">
-    <section class="left">
-      <Stepper
-        {steps}
-        {active}
-        onSelect={select}
-        {text}
-        {onTextChange}
-        {maskId}
-        {onMaskSelect}
-      />
-    </section>
-
-    <section class="right">
-      <div class="rightTop">
-        <div class="rightTitle">QR-Ansicht</div>
-        <div class="rightSub">
-          Hover über ein Modul (Pixel), um den Bereich zu sehen.
-        </div>
+    {#if decodeExerciseOpen}
+      <div>
+        <DecodeExercise model={decodeModel} text={EXERCISE_TEXT} />
       </div>
-
-      <QrGrid {model} pixelSize={20} />
-
-      <div class="legend">
-        <div class="lg"><span class="sw unset"></span> ungenutzt</div>
-        <div class="lg">
-          <span class="sw reserved"></span> reserviert (Format)
-        </div>
-        <div class="lg"><span class="sw data"></span> Byte-Position</div>
-        <div class="lg"><span class="sw off"></span> 0</div>
-        <div class="lg"><span class="sw on"></span> 1</div>
-        <div class="lg"><span class="sw hl"></span> Hover-Highlight</div>
-      </div>
-    </section>
-  </main>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -332,14 +354,14 @@
     height: 100%;
   }
 
-  /* Desktop: prevent whole-page scrolling; scroll left/right independently */
+  /* Desktop: prevent body scroll; the page itself is the scroll container. */
   @media (min-width: 1021px) {
     :global(body) {
       overflow: hidden;
     }
   }
 
-  /* Mobile: fall back to normal page scroll for single-column layout */
+  /* Mobile: normal document scroll. */
   @media (max-width: 1020px) {
     :global(body) {
       overflow: auto;
@@ -347,10 +369,19 @@
   }
 
   .page {
+    width: 100%;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .content {
     max-width: 1180px;
     margin: 0 auto;
     padding: 18px;
-    height: 100dvh;
+  }
+
+  .viewport {
+    height: calc(100dvh - 36px);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -358,16 +389,23 @@
 
   .top {
     margin-bottom: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 140;
+    padding-top: 0;
+    padding-bottom: 0;
+    /* background: var(--bg); */
   }
 
   .brand {
+    margin-top: 10px;
     display: flex;
     gap: 14px;
     align-items: center;
     padding: 14px;
     border: 1px solid var(--border);
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--bg);
   }
 
   .logo {
@@ -416,6 +454,14 @@
     .page {
       height: auto;
       min-height: 100dvh;
+      overflow: visible;
+    }
+    .viewport {
+      height: auto;
+      min-height: 0;
+    }
+    .content {
+      padding: 18px;
     }
   }
 
