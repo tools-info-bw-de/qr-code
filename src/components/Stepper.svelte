@@ -183,8 +183,11 @@
               <ul class="p">
                 <li>
                   Hier geht es um die <b>Codierung</b> (also die Erstellung) und
-                  nicht um die Dekodierung (also das Lesen) eines QR-Codes.<br
-                  />
+                  nicht um die Dekodierung (also das Lesen) eines
+                  <abbr
+                    title="'Quick Response' ('schnelle Antwort'), 1994 in Japan entwickelt. "
+                    >QR-Codes</abbr
+                  >.<br />
                   Die Reihenfolge der Schritte ist wichtig!
                 </li>
                 <li>Mit jedem Schritt wird der QR-Code erweitert.</li>
@@ -362,7 +365,9 @@
                     : ""}</code
                 >). Anschließend wird auch für diese 5 Bits des Formatstrings
                 noch eine Fehlerkorrektur berechnet und angehängt. Dieser String
-                wird zusätzlich auf eine andere Art maskiert.
+                wird zusätzlich auf eine andere Art maskiert.<br /><br />Damit
+                hast du es geschafft 🎉 Du kannst den QR-Code nun
+                <b>einscannen</b>.
               </p>
             {/if}
           </div>

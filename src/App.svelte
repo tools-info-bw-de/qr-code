@@ -3,6 +3,16 @@
   import QrGrid from "./components/QrGrid.svelte";
   import { buildQrGrid, iso88591Encode } from "./lib/qrModel.js";
 
+  const AUTHOR_NAME = "Marco Kümmel";
+  const SOURCE_URL = "https://github.com/tools-info-bw-de/qr-code";
+  const LICENSE_URL = `${SOURCE_URL}/blob/HEAD/LICENSE`;
+
+  let infoOpen = $state(false);
+  /** @type {HTMLButtonElement | null} */
+  let infoBtnEl = $state(null);
+  /** @type {HTMLDivElement | null} */
+  let infoPopEl = $state(null);
+
   const steps = [
     {
       id: 1,
@@ -130,7 +140,73 @@
       active = 5;
     }
   }
+
+  $effect(() => {
+    if (!infoOpen) return;
+
+    /** @param {KeyboardEvent} e */
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") infoOpen = false;
+    };
+
+    /** @param {PointerEvent} e */
+    const onPointerDown = (e) => {
+      const t = /** @type {Node | null} */ (e.target);
+      if (!t) return;
+      if (infoBtnEl && infoBtnEl.contains(t)) return;
+      if (infoPopEl && infoPopEl.contains(t)) return;
+      infoOpen = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  });
 </script>
+
+<div class="infoRoot">
+  <button
+    class="infoBtn"
+    type="button"
+    bind:this={infoBtnEl}
+    aria-haspopup="dialog"
+    aria-expanded={infoOpen}
+    aria-controls="author-info"
+    onclick={() => (infoOpen = !infoOpen)}
+  >
+    info
+  </button>
+
+  {#if infoOpen}
+    <div
+      class="infoPop"
+      id="author-info"
+      bind:this={infoPopEl}
+      role="dialog"
+      aria-label="Info"
+    >
+      <div class="infoTitle">Info</div>
+      <div class="infoRow"><span class="k">Autor</span> {AUTHOR_NAME}</div>
+      <div class="infoRow">
+        <span class="k">Lizenz</span>
+        <span class="v">
+          GNU GPL v3 (
+          <a href={LICENSE_URL} target="_blank" rel="noreferrer">LICENSE</a>
+          )
+        </span>
+      </div>
+      <div class="infoRow">
+        <span class="k">Quellcode</span>
+        <span class="v">
+          <a href={SOURCE_URL} target="_blank" rel="noreferrer">{SOURCE_URL}</a>
+        </span>
+      </div>
+    </div>
+  {/if}
+</div>
 
 <div class="page">
   <header class="top">
@@ -186,6 +262,64 @@
 </div>
 
 <style>
+  .infoRoot {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 200;
+  }
+
+  .infoBtn {
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    padding: 7px 12px;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .infoBtn:hover {
+    border-color: rgba(110, 231, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(110, 231, 255, 0.08);
+  }
+
+  .infoPop {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(16, 24, 38, 0.92);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+  }
+
+  .infoTitle {
+    font-weight: 850;
+    margin-bottom: 8px;
+  }
+
+  .infoRow {
+    display: grid;
+    grid-template-columns: 86px 1fr;
+    gap: 10px;
+    padding: 4px 0;
+    align-items: start;
+  }
+
+  .infoRow .k {
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .infoRow .v {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   :global(code) {
     padding: 2px 6px;
     border-radius: 8px;
