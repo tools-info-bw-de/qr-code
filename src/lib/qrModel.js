@@ -105,12 +105,7 @@ function writeFormatString(map, regions, maskId) {
   registerRegion(regions, {
     id: regionId,
     title: "Format-String",
-    description:
-      `EC-Level: L (11). Masken-ID (3 Bit): ${maskId.toString(2).padStart(3, "0")}. ` +
-      `Daten (5 Bit): ${dataBits.join("")}. BCH (10 Bit): ${bchBits.join("")}. ` +
-      `Format roh (vor XOR): ${format15Raw.toString(2).padStart(15, "0")}. ` +
-      `XOR-Maske: 101010000010010. ` +
-      `Format final (15 Bit, Bit 1..15 = Lesereihenfolge MSB→LSB): ${bitsMsbFirst.join("")}. (dez: ${format15})`,
+    description: bitsMsbFirst.join(""),
   });
 
   const bitValueForIndex = (bitIndex) => {
@@ -426,7 +421,7 @@ function placeBytePositionsPreview(map, regions, text, step) {
         ? "Längenfeld (1 Byte) – Position"
         : `Byte ${byteIndex} (Position)`,
       description: isLength
-        ? "Dieses Feld (8 Bits) speichert die Länge der Nutzdaten (im Byte-Mode für Version 1–9)."
+        ? "Dieses Feld (8 Bits) speichert die Länge der Nutzdaten."
         : "Position der nächsten 8 Bits im Zickzack-Verlauf. Die Pfeilrichtung zeigt die Leserichtung dieses Bytes.",
     });
 
@@ -595,7 +590,7 @@ function writeLengthByte(map, regions, byteLength) {
     regions,
     "len",
     "Längenfeld (1 Byte)",
-    "Dieses Byte (8 Bits) speichert die Länge der Nutzdaten (im Byte-Mode für Version 1–9).",
+    "Dieses Byte (8 Bits) speichert die Länge der Nutzdaten.",
     0,
     4,
     byteLength & 0xff,
@@ -603,20 +598,28 @@ function writeLengthByte(map, regions, byteLength) {
   );
 }
 
+function byteBits8(b) {
+  const v = b & 0xff;
+  return v.toString(2).padStart(8, "0");
+}
+
+function byteBits8WithPrintable(b) {
+  const v = b & 0xff;
+  const printable = v >= 32 && v <= 126 ? String.fromCharCode(v) : "";
+  return `${byteBits8(v)}${printable ? ` ('${printable}')` : ""}`;
+}
+
 function writePayloadBytes(map, regions, bytes) {
   for (let payloadIndex = 0; payloadIndex < bytes.length; payloadIndex++) {
     const byteNumber = payloadIndex + 1; // user-facing numbering
     const b = bytes[payloadIndex];
     const regionId = `byte:${byteNumber}`;
-    const printable = b >= 32 && b <= 126 ? String.fromCharCode(b) : "";
     writeByteToPath(
       map,
       regions,
       regionId,
       `Byte ${byteNumber}`,
-      `0x${b.toString(16).padStart(2, "0").toUpperCase()}${
-        printable ? ` ('${printable}')` : ""
-      }`,
+      `binär: ${byteBits8WithPrintable(b)}`,
       byteNumber,
       12 + payloadIndex * 8,
       b,
@@ -751,11 +754,8 @@ function writeEccLow(map, regions, payloadBytes) {
       map,
       regions,
       `ecc:${i + 1}`,
-      `ECC ${i + 1}`,
-      `Fehlerkorrektur-Byte ${i + 1} (aus Reed–Solomon, Low). Wert: 0x${b
-        .toString(16)
-        .padStart(2, "0")
-        .toUpperCase()}.`,
+      `Fehlerkorrektur ${i + 1}`,
+      `Fehlerkorrektur-Byte ${i + 1} (aus Reed–Solomon, Low). Wert (binär): ${byteBits8(b)}.`,
       byteIndex,
       byteIndex * 8,
       b,
@@ -780,8 +780,8 @@ function writePadBytes(map, regions, payloadLen) {
       map,
       regions,
       `pad:${byteIndex - stopPadByteIndex}`,
-      `Pad-Byte ${byteIndex - stopPadByteIndex}`,
-      `Padding-Byte (wechselnd 11101100/00010001). Wert (binär): ${b
+      `Auffüll-Byte ${byteIndex - stopPadByteIndex}`,
+      `Auffüll-Byte (wechselnd 11101100/00010001). Wert (binär): ${b
         .toString(2)
         .padStart(8, "0")}.`,
       byteIndex,
@@ -828,13 +828,10 @@ function placeByteBlocks(map, regions, bytes) {
 
     const b = bytes[byteIndex];
     const regionId = `byte:${byteIndex}`;
-    const printable = b >= 32 && b <= 126 ? String.fromCharCode(b) : "";
     registerRegion(regions, {
       id: regionId,
       title: `Byte ${byteIndex}`,
-      description: `0x${b.toString(16).padStart(2, "0").toUpperCase()}${
-        printable ? ` ('${printable}')` : ""
-      }`,
+      description: `binär: ${byteBits8WithPrintable(b)}`,
     });
 
     const bits = [];
@@ -937,5 +934,12 @@ export function buildQrGrid(step, text, maskId = null) {
     writeFormatString(map, regions, maskId);
   }
 
-  return { size: SIZE_V1, cells: Array.from(map.values()), regions };
+  const maskApplied = effectiveStep >= 11 && maskId != null;
+  return {
+    size: SIZE_V1,
+    cells: Array.from(map.values()),
+    regions,
+    maskApplied,
+    maskId,
+  };
 }

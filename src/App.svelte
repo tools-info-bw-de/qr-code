@@ -17,7 +17,7 @@
       short: "Position + Synchronisation",
       enabled: true,
       detail:
-        "Damit ein Scanner später überhaupt erkennt, dass er einen QR-Code vor sich hat, gibt es Erkennungsmuster. Diese sorgen zudem dafür, dass der Code auch aus einem schrägen Winkel erkannt wird. ",
+        'Damit ein Scanner später überhaupt erkennt, dass er einen QR-Code vor sich hat, gibt es die drei großen <b>Erkennungsmuster</b> in den Ecken.<br/><br/>Die "gepunkteten" Streifen dazwischen dienen der <b>Synchronisation</b>: Sie helfen dem Scanner, die Größe der einzelnen Module (Pixel) zu bestimmen. Das ist wichtig, wenn der QR-Code z.B. schräg gescannt wird, um die Verzerrung berücksichtigen zu können.<br/><br/>Der einzelne schwarze Punkt heißt <b>Dark Module</b>. Er dient u. a. als Referenzpunkt für die schwarze Farbe.',
     },
     {
       id: 3,
@@ -25,7 +25,7 @@
       short: "Enthält Metadaten zum QR-Code (später)",
       enabled: true,
       detail:
-        "Um die Erkennungsmuster herum gibt es reservierte Felder für den <b>Format-String</b> (Fehlerkorrektur-Level + Masken-ID). Wir markieren diese Plätze jetzt schon – sie werden erst ganz am Ende mit Daten gefüllt.<br/><br/>Alle Pixel, die jetzt noch frei sind, können ab dem nächsten Schritt für die eigentlichen Daten genutzt werden.",
+        "Um die Erkennungsmuster herum gibt es reservierte Felder für den <b>Format-String</b>. Er enthält Metadaten über den QR-Code (Fehlerkorrektur-Level & Masken-ID). Eine Erklärung dazu folgt später.<br/><br/>Wir markieren diese Plätze jetzt schon (hellrot) – sie werden erst ganz am Ende mit Daten gefüllt.<br/><br/>Alle Pixel, die jetzt noch frei sind, können ab dem nächsten Schritt für die eigentlichen Daten genutzt werden.",
     },
     {
       id: 4,
@@ -33,7 +33,7 @@
       short: "Festlegung des Datentyps (Byte, Alphanumerisch, ...)",
       enabled: true,
       detail:
-        "Im rechts-unteren 2x2-Block steht binär codiert, um welche Art von Daten es sich handelt. In dieser Demo wird nur der Byte-Modus unterstützt (0100).",
+        "Im rechts-unteren 2x2-Block steht binär codiert, um welche Art von Daten es sich handelt. In dieser Demo wird nur der Byte-Modus unterstützt (0100).<br/>Daten werden immer im Zickzack-Muster geschrieben.",
     },
     {
       id: 5,
@@ -41,7 +41,7 @@
       short: "Welchen Text soll der QR-Code enthalten?",
       enabled: true,
       detail:
-        "Wir codieren den Text in <b>ISO‑8859‑1</b> (Latin‑1) und zeigen die resultierenden Bytes + Byte-Länge. In diesem Schritt wird keine Änderung im QR-Code vorgenommen.",
+        'Hier kannst du den Text eingeben, der codiert werden soll. Es wird <abbr title="Eine Codierungsvorschrift vergleichbar mit ASCII oder UTF-8">ISO‑8859‑1</abbr> (Latin‑1) verwendet und die resultierenden Bytes + Byte-Länge werden angezeigt. In diesem Schritt wird keine Änderung im QR-Code vorgenommen.',
     },
     {
       id: 6,
@@ -49,7 +49,7 @@
       short: "Zickzack von rechts + Leserichtung",
       enabled: true,
       detail:
-        "Jetzt zeigen wir nur, <b>wo</b> die Bytes später liegen und in welcher <b>Richtung</b> sie gelesen/geschrieben werden: von rechts nach links in einem Zickzack. Pfeile markieren die Leserichtung pro Byte. Die Pixel bleiben dabei noch ungefüllt.",
+        "Hier siehst du nur, <b>wo</b> die Bytes später liegen und in welcher <b>Richtung und Reihenfolge</b> sie gelesen/geschrieben werden: von rechts nach links in einem Zickzack. Pfeile markieren die Leserichtung pro Byte. Die Pixel bleiben in diesem Schritt noch ungefüllt.",
     },
     {
       id: 7,
@@ -73,7 +73,7 @@
       short: "4 Bit weiß (0000)",
       enabled: true,
       detail:
-        "Als nächstes fügen wir einen <b>Stop-Block</b> hinzu: <b>4 Bits</b> mit dem Wert <code>0000</code> (also nur 0-Bits = weiß). Im Byte-Mode (0100) sind wir danach bereits wieder auf einer <b>Byte-Grenze</b>.",
+        "Als nächstes fügen wir einen <b>Stop-Block</b> hinzu: <b>4 Bits</b> mit dem Wert <code>0000</code> (also nur 0-Bits = weiß). <br/>Dieser Block markiert das Ende der eigentlichen Nutzdaten. Prinzipiell ist dieser Block insofern unnötig, da man durch die Längenangabe zu Beginn ja weiß, wie viele Daten man einlesen muss. <br/><br/>Alle weiteren Bits nach diesem Block gehören nicht mehr zu den Daten, sondern werden u. a. für die Fehlerkorrektur verwendet.",
     },
     {
       id: 10,
@@ -81,7 +81,7 @@
       short: "Reed–Solomon (7 Bytes) berechnen + schreiben",
       enabled: true,
       detail:
-        "Nach dem Stop-Block (0000) füllen wir zunächst die restlichen Datenplätze bis zur Daten-Kapazität mit Auffüll-Bytes (abwechselnd <code>11101100/00010001</code>) auf.<br/><br/> Anschließend berechnen wir die <b>Reed–Solomon</b>-Fehlerkorrektur (Level <b>Low</b>): aus den Daten-Bytes werden <b>7 ECC-Bytes</b> erzeugt (GF(256), Polynom 0x11d) und direkt in den QR-Zickzack geschrieben.",
+        'Nach dem Stop-Block (0000) füllen wir zunächst die restlichen Datenplätze bis zur Daten-Kapazität (hier 17 Bytes) mit Auffüll-Bytes (abwechselnd <code>11101100</code>/<code>00010001</code>) auf.<br/><br/> Anschließend berechnen wir die <b>Reed–Solomon</b>-Fehlerkorrektur (Level <b>Low</b>): aus den vorherigen Daten-Bytes werden <b>7 Fehlerkorrektur-Bytes</b> erzeugt und in den QR-Zickzack geschrieben.<br/><br/>Die Mathematik dahinter ist ziemlich kompliziert. Wer interessiert ist, kann z. B. <a href="https://en.wikipedia.org/wiki/QR_code#Error_correction" target="_blank" rel="noreferrer">diesen Wikipedia-Artikel</a> lesen.',
     },
     {
       id: 11,
@@ -89,15 +89,14 @@
       short: "Eine von 8 Masken anwenden",
       enabled: true,
       detail:
-        "In diesem Schritt wählen wir eine <b>Maske</b> (0\u20137) und wenden sie auf die <b>Datenmodule</b> an. Die Maske wird <b>nicht</b> auf Finder/Timing/Dark-Module oder den Format-String angewendet. Ohne Masken-Auswahl geht es nicht weiter.",
+        "Je nachdem, welche Daten du eingegeben hast, kann es nun vorkommen, dass die geschriebenen Pixel für große gleichmäßig gefärbte Flächen sorgen. <i>Das kannst du z. B. nachvollziehen, indem du bei Schritt 5 ganze 17x den Buchstaben 'ü' als Zeichen eingibst.</i><br/><br/>Die Kamera hätte nun vielleicht Schwierigkeiten genau zu erkennen, wo ein Pixel aufhört und das andere beginnt.<br/>Daher muss nun eine sogenannte Maske ausgewählt werden. Insgesamt gibt es 8 zur Auswahl. Die Maske wird nur auf die <b>Datenmodule</b> angewendet und <b>nicht</b> auf Erkennungsmuster/Synchronisation/Dark-Module oder den Format-String.<br/><br/>Die Maske wird vollständig über die Datenpixel gelegt und dann per XOR angewendet, d. h. sie kehrt die originalen Pixel überall dort um, wo das Maskenpixel 1 ist.<br/><br/>In echt prüft ein komplexer Algorithmus alle Masken durch und wählt den \"besten\" aus. Hier kannst du einfach alle Masken auswählen und die deiner Meinung nach beste Maske nutzen (die QR-Code-Erkennung sollte später in der Regel mit allen Masken funktionieren).",
     },
     {
       id: 12,
       title: "Format-String",
-      short: "ECC-Level + Masken-ID eintragen",
+      short: "Fehlerkorrektur-Level + Masken-ID eintragen",
       enabled: true,
-      detail:
-        "Zum Schluss schreiben wir den <b>Format-String</b> in die zuvor reservierten roten Felder: <b>Fehlerkorrektur-Level</b> (hier immer <b>Low/L</b>) + <b>Masken-ID</b> (0\u20137) plus BCH-Prüfbits. Dieser String wird <b>nicht</b> maskiert.",
+      detail: "",
     },
   ];
 
@@ -118,6 +117,9 @@
 
   function onMaskSelect(next) {
     maskId = next;
+    if (next == null && active >= 12) {
+      active = 11;
+    }
   }
 
   function onTextChange(next) {
@@ -179,22 +181,45 @@
         <div class="lg"><span class="sw on"></span> 1</div>
         <div class="lg"><span class="sw hl"></span> Hover-Highlight</div>
       </div>
-
-      <div class="panel mini">
-        <div class="row">
-          <div class="tag">Version</div>
-          <div class="value">1 (21×21)</div>
-        </div>
-      </div>
     </section>
   </main>
 </div>
 
 <style>
+  :global(code) {
+    padding: 2px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(110, 231, 255, 0.22);
+    background: rgba(59, 130, 246, 0.1);
+    color: rgba(231, 238, 252, 0.96);
+  }
+
+  :global(html, body, #app) {
+    height: 100%;
+  }
+
+  /* Desktop: prevent whole-page scrolling; scroll left/right independently */
+  @media (min-width: 1021px) {
+    :global(body) {
+      overflow: hidden;
+    }
+  }
+
+  /* Mobile: fall back to normal page scroll for single-column layout */
+  @media (max-width: 1020px) {
+    :global(body) {
+      overflow: auto;
+    }
+  }
+
   .page {
     max-width: 1180px;
     margin: 0 auto;
     padding: 18px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .top {
@@ -240,14 +265,23 @@
 
   .main {
     display: grid;
-    grid-template-columns: 600px 1fr;
+    grid-template-columns: minmax(340px, 1fr) minmax(620px, 1fr);
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1020px) {
     .main {
       grid-template-columns: 1fr;
+      overflow: visible;
+      min-height: auto;
+    }
+    .page {
+      height: auto;
+      min-height: 100dvh;
     }
   }
 
@@ -255,6 +289,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-height: 0;
+    overflow: hidden;
+    height: 100%;
   }
 
   .right {
@@ -262,6 +299,11 @@
     flex-direction: column;
     gap: 10px;
     border-radius: 16px;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    height: 100%;
   }
 
   .rightTop {
@@ -277,32 +319,6 @@
     color: var(--muted);
     font-size: 0.95rem;
     margin-top: 2px;
-  }
-
-  .panel {
-    padding: 14px;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .panel.mini {
-    padding: 12px 14px;
-  }
-
-  .row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 0;
-  }
-
-  .tag {
-    color: var(--muted);
-  }
-
-  .value {
-    font-weight: 750;
   }
 
   .legend {

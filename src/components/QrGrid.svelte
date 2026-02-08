@@ -104,6 +104,23 @@
       .slice()
       .sort((a, b) => (a.bitIndex ?? 0) - (b.bitIndex ?? 0));
   });
+
+  const showMaskWarning = $derived.by(() => {
+    if (!model?.maskApplied) return false;
+    const c = tooltip?.cell;
+    if (!c) return false;
+    if (c.kind !== "data") return false;
+    if (c.bitGroup === "byte" || c.bitGroup === "pad" || c.bitGroup === "ecc")
+      return true;
+    if (
+      typeof c.regionId === "string" &&
+      (c.regionId.startsWith("byte:") ||
+        c.regionId.startsWith("pad:") ||
+        c.regionId.startsWith("ecc:"))
+    )
+      return true;
+    return false;
+  });
 </script>
 
 <div
@@ -166,6 +183,12 @@
     >
       <div class="tt-title">{tooltip.info.title}</div>
       <div class="tt-desc">{tooltip.info.description}</div>
+      {#if showMaskWarning}
+        <div class="tt-warn">
+          Achtung: Ab Schritt 11 liegt eine Maske (XOR) über den Daten – Bits
+          können dadurch invertiert sein.
+        </div>
+      {/if}
       {#if tooltip.cell?.bitIndex != null}
         <div class="tt-meta">
           Bit {tooltip.cell.bitIndex}:
@@ -342,5 +365,12 @@
   .tt-desc {
     color: var(--muted);
     font-size: 0.95rem;
+  }
+
+  .tt-warn {
+    margin-top: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--danger);
   }
 </style>
