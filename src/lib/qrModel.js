@@ -418,7 +418,7 @@ function placeBytePositionsPreview(map, regions, text, step) {
     registerRegion(regions, {
       id: regionId,
       title: isLength
-        ? "Längenfeld (1 Byte) – Position"
+        ? "Datenlänge (1 Byte) – Position"
         : `Byte ${byteIndex} (Position)`,
       description: isLength
         ? "Dieses Feld (8 Bits) speichert die Länge der Nutzdaten."
@@ -903,7 +903,7 @@ export function buildQrGrid(step, text, maskId = null) {
     placeBytePositionsPreview(map, regions, text, effectiveStep);
   }
 
-  // Step 7: Längenfeld (8 Bit) schreiben
+  // Step 7: Datenlänge (8 Bit) schreiben
   if (effectiveStep >= 7) {
     writeLengthByte(map, regions, payloadBytes.length);
   }

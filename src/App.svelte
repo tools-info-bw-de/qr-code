@@ -65,11 +65,11 @@
     },
     {
       id: 7,
-      title: "Längenfeld",
+      title: "Datenlänge",
       short: "Byte-Länge eintragen (8 Bits)",
       enabled: true,
       detail:
-        "Jetzt wird das <b>Längenfeld</b> (8 Bit) in den QR-Zickzack geschrieben: die Byte-Länge der Nutzdaten. Es beginnt <b>direkt nach</b> den 4 Mode-Bits (0100).",
+        "Jetzt wird die <b>Datenlänge</b> (8 Bit) in den QR-Zickzack geschrieben: die Byte-Länge der Nutzdaten. Es beginnt <b>direkt nach</b> den 4 Mode-Bits (0100).",
     },
     {
       id: 8,

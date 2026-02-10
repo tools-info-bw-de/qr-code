@@ -288,7 +288,7 @@
 
             {#if step.id === 7}
               <p class="hint">
-                Jetzt wird das <b>Längenfeld</b> geschrieben:
+                Jetzt wird die <b>Datenlänge</b> geschrieben:
                 <b>{iso.byteLength}</b>
                 als 8-Bit-Zahl.
               </p>

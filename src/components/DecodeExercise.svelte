@@ -207,7 +207,7 @@
               oninput={onLengthInput}
               onfocus={focusLength}
               onblur={blurLength}
-              aria-label="Bits für Längenfeld"
+              aria-label="Bits für Datenlänge"
             />
           </div>
           <div class="cell">
